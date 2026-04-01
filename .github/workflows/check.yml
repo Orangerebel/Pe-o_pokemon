@@ -1,7 +1,7 @@
 name: Pokemon Sniper
 on:
   schedule:
-    - cron: '*/60 * * * *'  # Každých 60 minút (optimálne pre GitHub)
+    - cron: '*/15 * * * *'  # Každých 15 minút (optimálne pre GitHub)
   workflow_dispatch:
 
 jobs:
