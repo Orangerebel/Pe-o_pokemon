@@ -18,7 +18,8 @@ WEBY = [
     "https://www.gengar.cz/sk/pokemon-tcg"
 ]
 
-PRODUKTY = ["booster box", "booster bundle", "upc", "etb", "elite trainer box", "collection", "premium collection"]
+# Kľúčové slová - iba produkty, ktoré ťa reálne zaujímajú
+PRODUKTY = ["booster box", "booster bundle", "upc", "etb", "elite trainer box", "collection"]
 
 def load_history():
     if os.path.exists(DB_FILE):
@@ -31,51 +32,46 @@ def save_history(history):
         f.write("\n".join(sorted(history)))
 
 def check_all():
-    if not TOKEN or not ID:
-        print("Chýba TOKEN alebo ID v Secrets!")
-        sys.exit(1)
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-    }
     history = load_history()
-    new_finds = False
+    new_items_found = [] # Tu si budeme ukladať len tie, čo ešte nepoznáme
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
     for url in WEBY:
         try:
-            print(f"Kontrolujem: {url}")
-            res = requests.get(url, headers=headers, timeout=20)
-            res.raise_for_status()
+            res = requests.get(url, headers=headers, timeout=15)
+            if res.status_code != 200: continue
+            
             soup = BeautifulSoup(res.content, "html.parser")
             
             for link in soup.find_all('a', href=True):
-                text = link.get_text().lower().strip()
                 href = link['href']
-                
-                # Filter na kľúčové slová
+                text = link.get_text().lower().strip()
+
+                # Oprava relatívnej cesty
+                if href.startswith('/'):
+                    base = url.split('/')[2]
+                    href = f"https://{base}{href}"
+
+                # LOGIKA: Musí obsahovať kľúčové slovo A nesmie byť v histórii
                 if any(p in text for p in PRODUKTY):
-                    # Ošetrenie URL
-                    if href.startswith('/'):
-                        base = url.split('/')[2]
-                        href = f"https://{base}{href}"
-                    
                     if href not in history:
-                        # Overenie, či je to fakt produkt (odfiltrovanie menu a pod.)
-                        if len(text) > 10: 
-                            msg = f"🎯 NOVÝ POKÉMON DROOP: {text.upper()}\n🔗 Link: {href}"
-                            requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", 
-                                          json={"chat_id": ID, "text": msg})
-                            history.add(href)
-                            new_finds = True
-                            print(f"Nájdené: {text}")
-        except Exception as e:
-            print(f"Chyba na {url}: {e}")
+                        # Ak sme sem došli, našli sme SKUTOČNE novú vec
+                        new_items_found.append((text.upper(), href))
+                        history.add(href) # Pridáme hneď do pamäte, aby sme o tom druhýkrát nepísali
+        except:
             continue
 
-    if new_finds:
+    # ODOSIELANIE: Iba ak zoznam nových vecí nie je prázdny
+    if new_items_found:
+        for name, link in new_items_found:
+            msg = f"🔥 NOVINKA: {name}\n🔗 {link}"
+            requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id": ID, "text": msg})
+        
+        # Uložíme aktualizovanú históriu späť do súboru na GitHub
         save_history(history)
-        return True
-    return False
+        print(f"Nájdených {len(new_items_found)} nových produktov. Správy odoslané.")
+    else:
+        print("Nič nové sa nenašlo. Telegram zostáva ticho.")
 
 if __name__ == "__main__":
     check_all()
