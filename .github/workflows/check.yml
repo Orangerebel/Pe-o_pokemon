@@ -6,7 +6,16 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
+    permissions: # TOTO JE DÔLEŽITÉ - povolenie na zápis
+      contents: write
     steps:
       - uses: actions/checkout@v2
       - run: pip install requests
       - run: python bot.py
+      - name: Save history # TOTO ULOŽÍ PAMÄŤ BOTA
+        run: |
+          git config --global user.name "PokemonBot"
+          git config --global user.email "bot@github.com"
+          git add history.txt || true
+          git commit -m "Update history" || true
+          git push || true
