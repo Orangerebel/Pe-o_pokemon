@@ -1,12 +1,11 @@
 import requests
-import os 
-
+from bs4 import BeautifulSoup
+import os
 # --- KONFIGURÁCIA ---
 TOKEN = "8630548470:AAEVaJUo4FnYuoM78BNQsi7989ozJfzU3EA"
 ID = "7831610863"
 DB_FILE = "history.txt"
 
-# VŠETKY WEBY, KTORÉ SLEDUJEME:
 WEBY = [
     "https://www.xzone.sk/sberatelske-hry-pokemon-tcg?sort=date_desc",
     "https://www.ihrysko.sk/vyhladavanie?search=pokemon&s=6",
@@ -17,12 +16,7 @@ WEBY = [
     "https://www.gengar.cz/sk/pokemon-tcg"
 ]
 
-# TVOJE ŠPECIÁLNE PRODUKTY (Sniper mode):
-PRODUKTY = [
-    "booster box", "booster bundle", "upc", "ultra premium collection", 
-    "etb", "elite trainer box", "collection", "premium collection", "spc"
-]
-
+PRODUKTY = ["booster box", "booster bundle", "upc", "etb", "elite trainer box", "collection", "premium collection", "spc"]
 DOSTUPNOST = ["do košíka", "skladom", "kúpiť", "vložiť do košíka", "koupit", "skladem"]
 
 def load_history():
@@ -36,33 +30,40 @@ def save_history(history):
         f.write("\n".join(history))
 
 def check_all():
-    headers = {"User-Agent": "Mozilla/5.0"}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     history = load_history()
-    new_finds = []
+    new_finds = False
 
     for url in WEBY:
         try:
             res = requests.get(url, headers=headers, timeout=25)
-            obsah = res.text.lower()
+            soup = BeautifulSoup(res.content, "html.parser")
             
-            # Hľadáme tvoje produkty
-            najdene = [p for p in PRODUKTY if p in obsah]
-            je_skladom = any(d in obsah for d in DOSTUPNOST)
-            
-            if najdene and je_skladom:
-                # Vytvoríme unikátny kľúč (napr. "dracik-etb")
-                found_key = f"{url}-{najdene[0]}"
+            # Prejdeme všetky odkazy na stránke
+            for link in soup.find_all('a', href=True):
+                text = link.get_text().lower()
+                href = link['href']
                 
-                if found_key not in history:
-                    new_finds.append((url, najdene[0].upper()))
-                    history.add(found_key)
+                # Ak odkaz obsahuje tvoj produkt
+                if any(p in text for p in PRODUKTY):
+                    # Skontrolujeme, či je v okolí tlačidlo na kúpu (zjednodušene cez text stránky)
+                    full_content = res.text.lower()
+                    if any(d in full_content for d in DOSTUPNOST):
+                        
+                        # Opravíme relatívne linky (napr. /produkt na https://web.sk/produkt)
+                        if href.startswith('/'):
+                            base = url.split('/')[2]
+                            href = f"https://{base}{href}"
+                        
+                        if href not in history:
+                            msg = f"🎯 NOVÝ BOOSTER TY JEBO: {text.strip().upper()}\n🔗 Link: {href}"
+                            requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id": ID, "text": msg})
+                            history.add(href)
+                            new_finds = True
         except:
             continue
 
     if new_finds:
-        for url, item in new_finds:
-            msg = f"✨ NOVINKA DETEKOVANÁ: {item}\nLink: {url}"
-            requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id": ID, "text": msg})
         save_history(history)
 
 if __name__ == "__main__":
