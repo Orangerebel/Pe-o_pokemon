@@ -1,13 +1,14 @@
 name: Pokemon Sniper
 on:
   schedule:
-    - cron: '*/20 * * * *'  # Beží každých 20 minút
-  workflow_dispatch:       # Umožní ti to spustiť ručne tlačidlom
+    - cron: '*/60 * * * *'  # Každých 60 minút (optimálne pre GitHub)
+  workflow_dispatch:
+
 jobs:
   run:
     runs-on: ubuntu-latest
     permissions:
-      contents: write      # POVOLENIE: Aby si bot mohol uložiť históriu do projektu
+      contents: write
     steps:
       - uses: actions/checkout@v3
       - name: Set up Python
@@ -17,11 +18,14 @@ jobs:
       - name: Install dependencies
         run: pip install requests beautifulsoup4
       - name: Run bot
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python bot.py
       - name: Save history
         run: |
-          git config --global user.name "Github Action Bot"
+          git config --global user.name "Github Action"
           git config --global user.email "action@github.com"
-          git add history.txt || true
-          git commit -m "Update history with new finds" || true
+          git add history.txt
+          git commit -m "Update history" || exit 0
           git push
